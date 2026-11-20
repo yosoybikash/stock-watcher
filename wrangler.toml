@@ -24,4 +24,5 @@ VAPID_CONTACT = "mailto:you@example.com"
 # never in this file:
 #   FINNHUB_API_KEY  your Finnhub API key
 #   APP_TOKEN        a password you choose, typed into the app once
+#   TWELVEDATA_API_KEY  free key from twelvedata.com, for price charts
 # Push keys are generated automatically and stored in KV.

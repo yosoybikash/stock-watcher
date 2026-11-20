@@ -3,7 +3,7 @@ import { getQuote } from "./finnhub.js";
 import { createStore } from "./store.js";
 import { sendToAll } from "./push.js";
 import { runCheck } from "./watcher.js";
-import { RANGES, fetchYahooHistory } from "./history.js";
+import { RANGES, fetchHistory } from "./history.js";
 import { nyDate } from "./alerts.js";
 
 const DEFAULT_WATCHLIST = [
@@ -34,16 +34,21 @@ async function getHistory(url, env, store) {
 
   let data;
   try {
-    data = { symbol, range, source: "yahoo", ...(await fetchYahooHistory(symbol, range)) };
+    data = { symbol, range, ...(await fetchHistory(symbol, range, env)) };
   } catch (err) {
-    if (range !== "1D") throw new Error(`Chart data unavailable right now (${err.message})`);
-    // Fall back to prices this app recorded itself, from the most recent day that has any.
-    for (let back = 0; back < 5 && !data; back++) {
-      const day = nyDate(Math.floor(Date.now() / 1000) - back * 86400);
-      const points = (await store.getIntraday(day))?.[symbol];
-      if (points?.length >= 2) data = { symbol, range, source: "recorded", points, previousClose: null };
+    const hint = err.needsKey ? " Add a free TWELVEDATA_API_KEY secret in Cloudflare to enable charts." : "";
+    // For the 1-day chart, fall back to prices this app recorded, from the most recent day that has any.
+    if (range === "1D") {
+      for (let back = 0; back < 5 && !data; back++) {
+        const day = nyDate(Math.floor(Date.now() / 1000) - back * 86400);
+        const points = (await store.getIntraday(day))?.[symbol];
+        if (points?.length >= 2) data = { symbol, range, source: "recorded", points, previousClose: null };
+      }
     }
-    if (!data) throw new Error("Chart data unavailable right now. The app records its own prices while the market is open.");
+    if (!data) {
+      console.warn(`History ${symbol} ${range}: ${err.message}`);
+      throw new Error(`Chart data unavailable right now.${hint}`);
+    }
   }
   if (cache) {
     await cache.put(cacheKey, new Response(JSON.stringify(data), {
