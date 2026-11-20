@@ -1,0 +1,25 @@
+name = "stock-watcher"
+main = "src/worker.js"
+compatibility_date = "2026-11-01"
+
+[assets]
+directory = "public"
+binding = "ASSETS"
+
+# Every 5 minutes on weekdays, 13:00–21:59 UTC. The worker skips runs
+# outside 9:30–16:00 New York time, which covers daylight saving changes.
+[triggers]
+crons = ["*/5 13-21 * * 1-5"]
+
+# Storage for the watchlist, push subscriptions and sent alerts.
+# No id needed: Wrangler creates the namespace automatically on the first deploy.
+[[kv_namespaces]]
+binding = "KV"
+
+[vars]
+VAPID_CONTACT = "mailto:you@example.com"
+# Secrets: add these in the Cloudflare dashboard (Worker > Settings > Variables and Secrets),
+# never in this file:
+#   FINNHUB_API_KEY  your Finnhub API key
+#   APP_TOKEN        a password you choose, typed into the app once
+# Push keys are generated automatically and stored in KV.
