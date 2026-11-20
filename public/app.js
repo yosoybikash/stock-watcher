@@ -60,6 +60,10 @@ async function loadQuotes() {
     m.textContent = marketOpen ? "Market open" : "Market closed";
     m.classList.toggle("open", marketOpen);
     render(quotes);
+    const latest = Math.max(0, ...quotes.map((q) => q.time || 0));
+    $("asof").textContent = latest
+      ? `${marketOpen ? "Last trade" : "Closing price"} · ${new Date(latest * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+      : "";
   } catch (err) { toast(err.message); }
 }
 

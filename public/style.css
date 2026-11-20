@@ -32,3 +32,4 @@ input { font:inherit; padding:10px 12px; border-radius:10px; border:1px solid #3
 .actions { display:flex; gap:8px; margin:20px 0 8px; flex-wrap:wrap; }
 #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#334155; padding:10px 16px; border-radius:10px; opacity:0; transition:opacity .2s; pointer-events:none; max-width:90vw; }
 #toast.show { opacity:1; }
+.asof { text-transform:none; letter-spacing:0; font-weight:400; font-size:13px; float:right; }

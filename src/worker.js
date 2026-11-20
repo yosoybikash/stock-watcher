@@ -49,7 +49,7 @@ export default {
           const quotes = await Promise.all(list.map(async (r) => {
             try {
               const q = await getQuote(r.symbol, env.FINNHUB_API_KEY);
-              return { ...r, price: q.c, previousClose: q.pc, change: percentChange(q.c, q.pc) };
+              return { ...r, price: q.c, previousClose: q.pc, change: percentChange(q.c, q.pc), time: q.t };
             } catch (err) {
               return { ...r, error: err.message };
             }
