@@ -29,7 +29,7 @@ The code lives on GitHub. Cloudflare is connected to the repository, so **every 
 2. Connect your GitHub account and pick this repository.
 3. Keep the defaults. The project name must be **`stock-watcher`** (it matches `wrangler.toml`), the build command is empty, and the deploy command is `npx wrangler deploy`. Click **Deploy**.
    The first deploy creates the KV storage and the 5-minute schedule automatically.
-4. Open the new Worker, go to **Settings → Variables and Secrets**, and add two values of type **Secret**:
+4. Open the new Worker, go to **Settings → Variables and Secrets**, and add three values of type **Secret**:
    - `FINNHUB_API_KEY`: your Finnhub API key
    - `APP_TOKEN`: a long password you choose. You'll type it into the app once, and it stops other people from using your app.
    - `TWELVEDATA_API_KEY`: a free key from [twelvedata.com](https://twelvedata.com/register), used for the price charts.
