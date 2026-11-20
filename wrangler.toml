@@ -1,6 +1,8 @@
 name = "stock-watcher"
 main = "src/worker.js"
 compatibility_date = "2026-11-01"
+# Keep variables added in the Cloudflare dashboard when deploying from GitHub.
+keep_vars = true
 
 [assets]
 directory = "public"
