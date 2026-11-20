@@ -47,7 +47,7 @@ async function getHistory(url, env, store) {
     }
     if (!data) {
       console.warn(`History ${symbol} ${range}: ${err.message}`);
-      throw new Error(`Chart data unavailable right now.${hint}`);
+      throw new Error(`Chart data unavailable right now (${err.message}).${hint}`);
     }
   }
   if (cache) {
