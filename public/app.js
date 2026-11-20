@@ -1,4 +1,5 @@
 import { sparkline, detailChart } from "/chart.js";
+import { recentChanges } from "/changes.js";
 
 const $ = (id) => document.getElementById(id);
 let token = localStorage.getItem("token") || "";
@@ -61,6 +62,48 @@ async function fillSparkline(holder, q) {
   } catch { /* leave empty */ }
 }
 
+// The 1-day series, ending at the latest quote so it matches the price in the row.
+function withLatest(points, q) {
+  const pts = points.slice();
+  const last = pts[pts.length - 1];
+  if (last && typeof q.price === "number" && last[1] !== q.price && q.time && q.time > last[0]) pts.push([q.time, q.price]);
+  return pts;
+}
+
+async function renderStats(detail, q) {
+  const box = detail.querySelector(".stats");
+  try {
+    const h = await getHistory(q.symbol, "1D");
+    const changes = recentChanges(withLatest(h.points, q), h.previousClose ?? q.previousClose);
+    box.replaceChildren(...changes.map((c) => {
+      const tile = document.createElement("div");
+      tile.className = "stat";
+      const label = document.createElement("span");
+      label.className = "label";
+      label.textContent = c.label;
+      const value = document.createElement("strong");
+      if (c.change === null) {
+        value.textContent = "—";
+      } else {
+        const down = c.change < 0;
+        value.className = down ? "down" : c.change > 0 ? "up" : "";
+        value.textContent = `${down ? "−" : c.change > 0 ? "+" : ""}${Math.abs(c.change).toFixed(2)}%`;
+      }
+      tile.append(label, value);
+      if (c.partial) {
+        const note = document.createElement("span");
+        note.className = "note";
+        note.textContent = "since open";
+        tile.append(note);
+      }
+      tile.title = c.from ? `From $${c.from.toFixed(2)}` : "";
+      return tile;
+    }));
+  } catch {
+    box.replaceChildren();
+  }
+}
+
 async function renderDetail(detail, q) {
   const plot = detail.querySelector(".plot");
   const period = detail.querySelector(".period");
@@ -71,12 +114,7 @@ async function renderDetail(detail, q) {
     const h = await getHistory(q.symbol, openRange);
     const isDay = openRange === "1D";
     const prev = isDay ? (h.previousClose ?? q.previousClose) : null;
-    const pts = h.points.slice();
-    // End the 1-day line at the latest quote so it matches the price in the row.
-    const lastT = pts[pts.length - 1][0];
-    if (isDay && typeof q.price === "number" && pts[pts.length - 1][1] !== q.price && q.time && q.time > lastT) {
-      pts.push([q.time, q.price]);
-    }
+    const pts = isDay ? withLatest(h.points, q) : h.points;
     const base = prev ?? pts[0][1];
     const refs = isDay && prev ? [
       { value: prev, label: "Prev close", kind: "prev" },
@@ -115,7 +153,10 @@ function buildDetail(q) {
   plot.className = "plot";
   const source = document.createElement("div");
   source.className = "source";
-  detail.append(ranges, plot, source);
+  const stats = document.createElement("div");
+  stats.className = "stats";
+  detail.append(stats, ranges, plot, source);
+  renderStats(detail, q);
   return detail;
 }
 
