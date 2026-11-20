@@ -3,6 +3,8 @@ import { getQuote } from "./finnhub.js";
 import { createStore } from "./store.js";
 import { sendToAll } from "./push.js";
 import { runCheck } from "./watcher.js";
+import { RANGES, fetchYahooHistory } from "./history.js";
+import { nyDate } from "./alerts.js";
 
 const DEFAULT_WATCHLIST = [
   { symbol: "AAPL", dropPercent: 3 },
@@ -16,6 +18,39 @@ const json = (data, status = 200) =>
 function authorized(request, env) {
   const header = request.headers.get("authorization") || "";
   return env.APP_TOKEN && header === `Bearer ${env.APP_TOKEN}`;
+}
+
+async function getHistory(url, env, store) {
+  const symbol = (url.searchParams.get("symbol") || "").toUpperCase();
+  const range = url.searchParams.get("range") || "1D";
+  if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(symbol)) throw new Error("Invalid symbol");
+  if (!RANGES[range]) throw new Error("Invalid range");
+
+  // Cache per symbol+range so repeated opens don't hit the data source.
+  const cache = typeof caches !== "undefined" ? caches.default : null;
+  const cacheKey = new Request(`https://cache.stock-watcher/history/${symbol}/${range}`);
+  const hit = cache && (await cache.match(cacheKey));
+  if (hit) return hit.json();
+
+  let data;
+  try {
+    data = { symbol, range, source: "yahoo", ...(await fetchYahooHistory(symbol, range)) };
+  } catch (err) {
+    if (range !== "1D") throw new Error(`Chart data unavailable right now (${err.message})`);
+    // Fall back to prices this app recorded itself, from the most recent day that has any.
+    for (let back = 0; back < 5 && !data; back++) {
+      const day = nyDate(Math.floor(Date.now() / 1000) - back * 86400);
+      const points = (await store.getIntraday(day))?.[symbol];
+      if (points?.length >= 2) data = { symbol, range, source: "recorded", points, previousClose: null };
+    }
+    if (!data) throw new Error("Chart data unavailable right now. The app records its own prices while the market is open.");
+  }
+  if (cache) {
+    await cache.put(cacheKey, new Response(JSON.stringify(data), {
+      headers: { "content-type": "application/json", "cache-control": `max-age=${RANGES[range].cacheSeconds}` },
+    }));
+  }
+  return data;
 }
 
 export default {
@@ -56,6 +91,8 @@ export default {
           }));
           return json({ marketOpen: isMarketOpen(), quotes });
         }
+        case "GET /api/history":
+          return json(await getHistory(url, env, store));
         case "POST /api/subscribe": {
           const sub = await request.json();
           if (!sub?.endpoint?.startsWith("https://") || !sub?.keys?.p256dh || !sub?.keys?.auth) {

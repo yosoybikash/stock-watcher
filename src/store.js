@@ -46,6 +46,12 @@ export function createStore(kv, defaults) {
       }
       return keys;
     },
+    async getIntraday(day) {
+      return kv.get(`intraday:${day}`, "json");
+    },
+    async setIntraday(day, series) {
+      await kv.put(`intraday:${day}`, JSON.stringify(series), { expirationTtl: 7 * 24 * 3600 });
+    },
     async markAlertSent(key) {
       // Keep for 3 days; it only needs to outlive the trading day.
       await kv.put(key, "1", { expirationTtl: 3 * 24 * 3600 });

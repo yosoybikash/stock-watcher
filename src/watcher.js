@@ -1,6 +1,7 @@
 import { evaluate, alertKey, formatAlert, nyDate } from "./alerts.js";
 import { getQuote } from "./finnhub.js";
 import { sendToAll } from "./push.js";
+import { appendIntraday } from "./history.js";
 
 /** One watcher pass: fetch quotes, decide alerts, push them. */
 export async function runCheck(env, store, { fetchFn = fetch, now = new Date() } = {}) {
@@ -9,9 +10,11 @@ export async function runCheck(env, store, { fetchFn = fetch, now = new Date() }
   const sent = await store.sentAlertKeys(watchlist.map((r) => alertKey(r.symbol, today)));
 
   const results = [];
+  const readings = [];
   for (const rule of watchlist) {
     try {
       const quote = await getQuote(rule.symbol, env.FINNHUB_API_KEY, fetchFn);
+      readings.push({ symbol: rule.symbol, t: quote.t, price: quote.c });
       const alert = evaluate(rule, quote, sent);
       results.push({ symbol: rule.symbol, price: quote.c, change: quote.pc ? ((quote.c - quote.pc) / quote.pc) * 100 : 0, alerted: !!alert });
       if (!alert) continue;
@@ -23,6 +26,13 @@ export async function runCheck(env, store, { fetchFn = fetch, now = new Date() }
     } catch (err) {
       console.warn(err.message);
       results.push({ symbol: rule.symbol, error: err.message });
+    }
+  }
+  if (readings.length) {
+    try {
+      await store.setIntraday(today, appendIntraday(await store.getIntraday(today), readings));
+    } catch (err) {
+      console.warn("Could not record prices:", err.message);
     }
   }
   return results;

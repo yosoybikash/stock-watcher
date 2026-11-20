@@ -1,3 +1,5 @@
+import { sparkline, detailChart } from "/chart.js";
+
 const $ = (id) => document.getElementById(id);
 let token = localStorage.getItem("token") || "";
 let watchlist = [];
@@ -33,7 +35,92 @@ async function showApp() {
   await Promise.all([loadQuotes(), updateNotifyUi()]);
 }
 
+// ---- Charts ----
+let chartCache = new Map(); // "SYM|RANGE" -> { points, previousClose, source }
+let openSymbol = null;
+let openRange = "1D";
+let lastQuotes = [];
+
+async function getHistory(symbol, range) {
+  const key = `${symbol}|${range}`;
+  if (!chartCache.has(key)) {
+    chartCache.set(key, api(`/api/history?symbol=${encodeURIComponent(symbol)}&range=${range}`));
+  }
+  try {
+    return await chartCache.get(key);
+  } catch (err) {
+    chartCache = new Map([...chartCache].filter(([k]) => k !== key)); // allow retry
+    throw err;
+  }
+}
+
+async function fillSparkline(holder, q) {
+  try {
+    const h = await getHistory(q.symbol, "1D");
+    holder.replaceChildren(sparkline(h.points, h.previousClose ?? q.previousClose));
+  } catch { /* leave empty */ }
+}
+
+async function renderDetail(detail, q) {
+  const plot = detail.querySelector(".plot");
+  const period = detail.querySelector(".period");
+  const source = detail.querySelector(".source");
+  detail.querySelectorAll(".ranges button").forEach((b) => b.classList.toggle("on", b.dataset.range === openRange));
+  plot.classList.add("loading");
+  try {
+    const h = await getHistory(q.symbol, openRange);
+    const isDay = openRange === "1D";
+    const prev = isDay ? (h.previousClose ?? q.previousClose) : null;
+    const pts = h.points.slice();
+    // End the 1-day line at the latest quote so it matches the price in the row.
+    const lastT = pts[pts.length - 1][0];
+    if (isDay && typeof q.price === "number" && pts[pts.length - 1][1] !== q.price && q.time && q.time > lastT) {
+      pts.push([q.time, q.price]);
+    }
+    const base = prev ?? pts[0][1];
+    const refs = isDay && prev ? [
+      { value: prev, label: "Prev close", kind: "prev" },
+      { value: prev * (1 - q.dropPercent / 100), label: `Alert −${q.dropPercent}%`, kind: "alert" },
+    ] : [];
+    detailChart(plot, pts, { range: openRange, baseline: base, refs });
+    const chg = ((pts[pts.length - 1][1] - base) / base) * 100;
+    period.textContent = `${chg >= 0 ? "+" : ""}${chg.toFixed(2)}% ${isDay ? "today" : `over ${openRange}`}`;
+    period.className = `period ${chg < 0 ? "down" : "up"}`;
+    source.textContent = h.source === "recorded" ? "Prices recorded by this app every 5 minutes" : "";
+  } catch (err) {
+    plot.replaceChildren(Object.assign(document.createElement("div"), { className: "msg", textContent: err.message }));
+    period.textContent = "";
+  } finally {
+    plot.classList.remove("loading");
+  }
+}
+
+function buildDetail(q) {
+  const detail = document.createElement("li");
+  detail.className = "detail";
+  const ranges = document.createElement("div");
+  ranges.className = "ranges";
+  for (const r of ["1D", "5D", "1M", "6M", "1Y"]) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = r;
+    b.dataset.range = r;
+    b.onclick = () => { openRange = r; renderDetail(detail, q); };
+    ranges.append(b);
+  }
+  const period = document.createElement("span");
+  period.className = "period";
+  ranges.append(period);
+  const plot = document.createElement("div");
+  plot.className = "plot";
+  const source = document.createElement("div");
+  source.className = "source";
+  detail.append(ranges, plot, source);
+  return detail;
+}
+
 function render(quotes) {
+  lastQuotes = quotes;
   const list = $("list");
   list.innerHTML = "";
   for (const q of quotes) {
@@ -43,11 +130,27 @@ function render(quotes) {
     const alerting = hasPrice && chg <= -q.dropPercent;
     li.innerHTML = `
       <div><span class="sym"></span>${alerting ? '<span class="alerting">ALERT</span>' : ""}<div class="sub">Alert at −${q.dropPercent}%</div></div>
+      <div class="sparkholder"></div>
       <div class="price">${hasPrice ? `$${q.price.toFixed(2)}<div class="chg ${chg < 0 ? "down" : "up"}">${chg >= 0 ? "+" : ""}${chg.toFixed(2)}%</div>` : `<span class="muted small">${q.error ? "No data" : "…"}</span>`}</div>
       <button class="icon" aria-label="Remove">✕</button>`;
     li.querySelector(".sym").textContent = q.symbol;
-    li.querySelector("button").onclick = () => saveWatchlist(watchlist.filter((w) => w.symbol !== q.symbol));
+    li.querySelector("button").onclick = (e) => {
+      e.stopPropagation();
+      saveWatchlist(watchlist.filter((w) => w.symbol !== q.symbol));
+    };
+    li.onclick = () => {
+      openSymbol = openSymbol === q.symbol ? null : q.symbol;
+      openRange = "1D";
+      render(lastQuotes);
+    };
     list.appendChild(li);
+    if (hasPrice) fillSparkline(li.querySelector(".sparkholder"), q);
+    if (openSymbol === q.symbol) {
+      li.classList.add("open");
+      const detail = buildDetail(q);
+      list.appendChild(detail);
+      renderDetail(detail, q);
+    }
   }
 }
 
@@ -59,6 +162,8 @@ async function loadQuotes() {
     const m = $("market");
     m.textContent = marketOpen ? "Market open" : "Market closed";
     m.classList.toggle("open", marketOpen);
+    // New quotes: refresh the 1-day charts, keep longer ranges cached.
+    chartCache = new Map([...chartCache].filter(([k]) => !k.endsWith("|1D")));
     render(quotes);
     const latest = Math.max(0, ...quotes.map((q) => q.time || 0));
     $("asof").textContent = latest

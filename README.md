@@ -7,6 +7,8 @@ A home-screen web app that watches US stocks and sends a push notification to yo
 - **Default watchlist:** AAPL, NVDA, TSLA at 3%. Add or remove stocks in the app.
 - **Cost:** free. Runs on Cloudflare Workers' free plan, and prices come from Finnhub's free tier.
 
+- **Charts:** each stock shows a 1-day trend line. Tap a stock for a full chart (1D, 5D, 1M, 6M, 1Y) with yesterday's close and your alert level marked. Price history comes from Yahoo Finance's public chart data, which is unofficial and can change. If it's unavailable, the 1-day chart falls back to prices this app records every 5 minutes.
+
 It's a price watcher, not financial advice.
 
 ## How it's hosted
